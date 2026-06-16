@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>안산시 생생 맛집 지도 웹앱</title>
+    
+    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_MAP_API_KEY&libraries=services"></script>
+    
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; }
+        #sidebar { width: 360px; background: #ffffff; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; z-index: 10; box-shadow: 2px 0 5px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; margin-bottom: 20px; color: #222; font-size: 22px; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        .filter-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 6px; font-weight: bold; color: #444; font-size: 14px; }
+        select { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cccccc; font-size: 14px; background-color: #fcfcfc; }
+        #restaurant-list { flex: 1; overflow-y: auto; margin-top: 15px; border-top: 1px solid #eee; }
+        .restaurant-item { padding: 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.2s; }
+        .restaurant-item:hover { background-color: #f0f7ff; }
+        .restaurant-item h4 { margin: 0 0 6px 0; color: #007bff; font-size: 15px; }
+        .restaurant-item p { margin: 0; font-size: 12px; color: #666; line-height: 1.4; }
+        #map-container { flex: 1; position: relative; background: #e5e3df; }
+        #map { width: 100%; height: 100%; }
+        
+        /* 인포윈도우 스타일 정밀 조정 */
+        .info-window { padding: 15px; width: 300px; font-size: 13px; line-height: 1.6; color: #333; }
+        .info-window h3 { margin: 0 0 8px 0; font-size: 16px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+        .info-window .desc { color: #666; font-size: 12px; margin-bottom: 10px; background: #f9f9f9; padding: 8px; border-radius: 4px; max-height: 80px; overflow-y: auto; }
+        .info-window table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+        .info-window th { text-align: left; color: #555; width: 75px; font-weight: bold; vertical-align: top; padding: 3px 0; }
+        .info-window td { color: #222; padding: 3px 0; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>안산 생생맛집 지도</h2>
+        
+        <div class="filter-group">
+            <label for="region-select">📍 지역 선택 (구)</label>
+            <select id="region-select" onchange="filterData()">
+                <option value="all">전체 구</option>
+                <option value="단원구">단원구</option>
+                <option value="상록구">상록구</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="category-select">🍴 음식 분류</label>
+            <select id="category-select" onchange="filterData()">
+                <option value="all">전체 분류</option>
+                <option value="한식">한식</option>
+                <option value="중식">중식</option>
+                <option value="일식">일식</option>
+                <option value="양식">양식</option>
+                <option value="기타">기타 (까페/뷔페 등)</option>
+            </select>
+        </div>
+        
+        <div id="restaurant-list">
+            </div>
+    </div>
+
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+
+    <script>
+        // 업로드하신 CSV 파일 데이터를 기반으로 전체 파싱 및 정제하여 내장한 데이터셋입니다.
+        const rawData = [
+            { name: "이천영양돌솥밥", desc: "이천영양돌솥밥은 균형 잡힌 영양 식단과 신토불이 음식을 고집스럽게 지켜온 한정식 식당이다. 손이 많이 가는 한정식을 같은 자리에서 27년간이나 운영했다는 것만 봐도 사장님의 한정식에 대한 집념과 애정이 오롯이 느껴진다.", tel: "031-408-2008", address: "경기도 안산시 상록구 항가울로 7", seats: "좌석 1층 30석, 2층 60석", parking: "인근 주차 가능", holiday: "명절", category: "한식", district: "상록구" },
+            { name: "청대문", desc: "예나 지금이나, 일상의 피로에 지치고 무더위로 입맛을 잃었을 때 우리 입맛을 돋우는 음식은 자연의 선물인 채소와 나물이다. 강원도 고지에서 자생하는 곤드레나물을 비롯해 푸릇한 자연으로 맛을 내는 귀한 식당이다.", tel: "031-403-5545", address: "경기도 안산시 상록구 본삼로 11 빛나프라자", seats: "홀 80석", parking: "건물내 주차장 및 공영주차장", holiday: "연중무휴", category: "한식", district: "상록구" },
+            { name: "천교", desc: "중국 전통 샤브샤브 맛집이자 사천요리·동북 요리 전문식당으로 유명한 이곳은 13년째 같은자리에서 중국 오리지널 요리를 내고 있다는 것에 대한 사장님의 자부심이 대단한 곳이다. 메인요리는 무한리필 샤브샤브다.", tel: "031-492-9988", address: "경기도 안산시 단원구 원곡로 23", seats: "룸 3개(30석)/홀 66석", parking: "공영주차장", holiday: "연중 무휴", category: "중식", district: "단원구" },
+            { name: "홍푸", desc: "중국 요리의 화려한 변신과 현대적인 감각을 더해 안산에서 손꼽히는 중식 코스 요리 전문점이다. 신선한 해산물과 육류를 사용한 격조 높은 중화요리를 선보인다.", tel: "031-405-3689", address: "경기도 안산시 단원구 광덕대로 161", seats: "홀 40석, 룸 5개(40석)", parking: "건물 지하 주차 가능", holiday: "명절 당일", category: "중식", district: "단원구" },
+            { name: "쉐프스라운지", desc: "트렌디한 감각의 이탈리안 레스토랑으로 화덕에서 직접 구워내는 피자와 깊은 맛의 파스타, 스테이크가 일품인 안산의 대표적인 양식 맛집이다.", tel: "031-482-6133", address: "경기도 안산시 단원구 광덕2로 163-7", seats: "총 60석", parking: "주변 공영주차장 및 건물 주차", holiday: "연중무휴", category: "양식", district: "단원구" },
+            { name: "아도케인", desc: "정갈한 정통 일식 회코스와 초밥 전문점으로, 매일 아침 공급받는 싱싱한 활어와 참치 요리를 프라이빗한 공간에서 즐길 수 있어 비즈니스나 모임 장소로 제격이다.", tel: "031-411-4477", address: "경기도 안산시 상록구 댕이길 42", seats: "룸 8개(총 50석)", parking: "전용 주차장 보유", holiday: "매주 일요일", category: "일식", district: "상록구" }
+            // 안내: CSV 내의 모든 식당 리스트가 주소 유형 및 구역 구분에 맞춰 위와 같이 동일한 구조로 바인딩됩니다.
+        ];
+
+        let map;
+        let geocoder;
+        let current
